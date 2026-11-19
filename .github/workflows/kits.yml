@@ -1,0 +1,47 @@
+name: Baixar fotos dos midia kits
+on:
+  push:
+    paths: ['urls.txt']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  kits:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Instalar ImageMagick
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq imagemagick >/dev/null
+      - name: Baixar e reduzir fotos
+        run: |
+          mkdir -p fotos
+          : > falhas_kits.txt
+          while read -r nome url; do
+            [ -z "$nome" ] && continue
+            [ -f "fotos/$nome.jpg" ] && continue
+            ok=0
+            rm -f tmp page.html
+            curl -sSL --max-time 90 -A "Mozilla/5.0" -o tmp "$url" || true
+            mt=$(file -b --mime-type tmp 2>/dev/null)
+            if [ "${mt%%/*}" != "image" ]; then
+              cp tmp page.html 2>/dev/null
+              img=$(grep -oiE '<img[^>]+src="[^"]+"' page.html | head -1 | sed -E 's/.*src="([^"]+)".*/\1/')
+              if [ -n "$img" ]; then
+                case "$img" in http*) ;; /*) img="$(echo "$url" | grep -oE '^https?://[^/]+')$img";; *) img="${url%/}/$img";; esac
+                curl -sSL --max-time 90 -A "Mozilla/5.0" -o tmp "$img" || true
+                mt=$(file -b --mime-type tmp 2>/dev/null)
+              fi
+            fi
+            if [ "${mt%%/*}" = "image" ] && convert tmp -auto-orient -resize '1600x1600>' -quality 85 "fotos/$nome.jpg" 2>/dev/null; then ok=1; fi
+            [ $ok = 1 ] || echo "$nome $url $mt" >> falhas_kits.txt
+          done < urls.txt
+          rm -f tmp page.html
+          ls fotos > manifesto.txt
+          echo "falhas: $(wc -l < falhas_kits.txt)"
+      - name: Salvar no repositorio
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add -A
+          git commit -m "Fotos dos midia kits" || echo "nada novo"
+          git push
