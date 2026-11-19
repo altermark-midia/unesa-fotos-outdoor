@@ -1,7 +1,7 @@
 name: Baixar fotos dos midia kits
 on:
   push:
-    paths: ['urls.txt']
+    paths: ['urls.txt', '.github/workflows/kits.yml']
   workflow_dispatch:
 permissions:
   contents: write
@@ -25,7 +25,7 @@ jobs:
             mt=$(file -b --mime-type tmp 2>/dev/null)
             if [ "${mt%%/*}" != "image" ]; then
               cp tmp page.html 2>/dev/null
-              img=$(grep -oiE '<img[^>]+src="[^"]+"' page.html | head -1 | sed -E 's/.*src="([^"]+)".*/\1/')
+              img=$(grep -oiE 'src="[^"]+"' page.html | sed -E 's/^src="([^"]+)"$/\1/' | grep -vi logomarca | grep -iE 'uploads|\.(jpe?g|png|webp)' | head -1 | sed 's/&amp;/\&/g')
               if [ -n "$img" ]; then
                 case "$img" in http*) ;; /*) img="$(echo "$url" | grep -oE '^https?://[^/]+')$img";; *) img="${url%/}/$img";; esac
                 curl -sSL --max-time 90 -A "Mozilla/5.0" -o tmp "$img" || true
